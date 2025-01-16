@@ -1,0 +1,735 @@
+﻿program SBA_Jones;
+{$APPTYPE CONSOLE}
+uses
+    Crt, sysutils;
+
+
+const
+    WINDOW_SIZE_X = 77;
+    WINDOW_SIZE_Y = 21;
+
+
+procedure startGame; forward;
+procedure generateOptions; forward;
+procedure generateWindow; forward;
+procedure FlushKeyBuffer; forward;
+
+
+type
+    recordsType = record
+        rank:integer;
+        playerName:string;
+        timeUsed:TDateTime;
+    end;
+    recordsRay = array[1..10] of recordsType;
+
+
+    Leaderboard = object
+        private
+            records:recordsRay;
+        public
+            constructor Create();
+            procedure readFile;
+            procedure writeFile;
+            function addRecord(userName:String; timeUsed:TDateTime):integer;
+            procedure generate;
+            procedure clearRecords;
+        end;
+    Timer = object
+        private
+            startTime, endTime:TDateTime;
+        public
+            constructor Create();
+            procedure startTimer;
+            function getTime():TDateTime;
+            procedure endTimer;
+            procedure printTimeUsed;
+            procedure updateTimeUsed(x:integer; y:integer);
+        end;
+
+
+var
+    difficulty:integer;
+    board:Leaderboard;
+    stopWatch:Timer;
+
+
+//Leaderboard functions
+constructor Leaderboard.Create();
+    begin
+        Leaderboard.readFile;
+    end;
+procedure Leaderboard.readFile();
+    procedure swapRecords(x:integer; y:integer);
+        var
+            temp:recordsType;
+        begin
+            temp := records[x];
+            records[x] := records[y];
+            records[y] := temp;
+        end;
+    procedure sortLeaderboard(var leaderboard);
+        var
+            subI, subJ:integer;
+        begin
+            for subI := 1 to length(records) do
+                for subJ := 1 to length(records)-subI do
+                    if(records[subJ].timeUsed > records[subJ+1].timeUsed)then
+                        swapRecords(subJ, subJ+1);
+        end;
+    var
+        leaderboardIn:file of recordsRay;
+    begin
+        //
+        assign(leaderboardIn, './maps/default.board');
+        reset(leaderboardIn);
+        read(leaderboardIn, records);
+        close(leaderboardIn);
+        sortLeaderboard(records);
+    end;
+procedure Leaderboard.writeFile();
+    var
+        leaderboardOut:file of recordsRay;
+    begin
+        //
+        assign(leaderboardOut, './maps/default.board');
+        rewrite(leaderboardOut);
+        write(leaderboardOut, records);
+        close(leaderboardOut);
+    end;
+
+
+procedure Leaderboard.generate();
+    var
+        subI:integer;
+        x1, x2:char;
+    begin
+        clrScr;
+        generateWindow;
+        FlushKeyBuffer;
+        TextBackground(black);
+        for subI := 1 to length(records) do
+            begin
+                GotoXY(3, 3+subI);
+                writeln(subI:3, records[subI].playerName:30, records[subI].timeUsed:30:0);
+            end;
+        GotoXY(3, 19);
+        writeln('Press "x" to reset records.');
+        x1 := Readkey;
+        if (x1 = 'x')then
+            begin
+                GotoXY(3, 19);
+                writeln('Press "x" again to confirm deletion.');
+                x2 := Readkey;
+                if (x2 = 'x')then
+                    begin
+                        clearRecords;
+                        Leaderboard.generate();
+                        exit();
+                    end;
+            end;
+        generateOptions;
+    end;
+
+
+function Leaderboard.addRecord(userName:String; timeUsed:TDateTime):integer;
+    var
+        subI, subJ:integer;
+        h1, m1, s1, ms1:word;
+    begin
+        //Update the time, + insertion sort into records array
+        DecodeTime(timeUsed, h1, m1, s1, ms1);
+        timeUsed := ((h1*60+m1)*60+s1)*1000+ms1;
+        if(timeUsed > records[length(records)].timeUsed)then
+            exit();
+        subI := 1;
+        while timeUsed > records[subI].timeUsed do
+            begin
+                subI := subI + 1;
+            end;
+        for subJ := length(records)-1 downto subI do
+            begin
+                records[subJ + 1] := records[subJ];
+            end;
+        records[subI].timeUsed := timeUsed;
+        records[subI].playerName := userName;
+        Leaderboard.writeFile();
+        exit(subI);
+    end;
+
+
+procedure Leaderboard.clearRecords;
+    var
+        x: recordsType;
+        subI:Integer;
+    begin
+        x.rank := 1;
+        x.playerName := 'xxx';
+        x.timeUsed := 999999999;
+        for subI := 1 to 10 do
+            begin
+                records[subI] := x;
+            end;
+        Leaderboard.writeFile();
+    end;
+
+
+//Timer functions
+constructor Timer.Create();
+    begin
+        startTime := 0;
+        endTime := 0;
+    end;
+procedure Timer.startTimer;
+    begin
+        startTime := Time;
+        endTime := 0;
+    end;
+function Timer.getTime():TDateTime;
+    begin
+        if endTime = 0 then
+            exit(Time - startTime);
+        exit(endTime - startTime);
+    end;
+procedure Timer.endTimer;
+    begin
+        endTime := Time;
+    end;
+procedure Timer.printTimeUsed;
+    var
+        h1, m1, s1, ms1: word;
+    begin
+        write('Time Used: ');
+        DecodeTime(endTime - startTime, h1, m1, s1, ms1);
+        writeln(h1, ':', m1, ':', s1, ':', ms1);
+    end;
+
+
+procedure Timer.updateTimeUsed(x:integer; y:integer);
+    var
+        h1, m1, s1, ms1: word;
+    begin
+        TextBackground(black);
+        GotoXY(x, y);
+        write('Time Used: ');
+        DecodeTime(Time - startTime, h1, m1, s1, ms1);
+        writeln(h1, ':', m1, ':', s1, ':', ms1);
+    end;
+//other functions
+procedure FlushKeyBuffer;
+    begin
+        while KeyPressed do
+            Readkey;
+    end;
+
+
+
+
+
+
+procedure generateWindow;
+    var
+        subI:integer;
+    begin
+        Window(1,1,WINDOW_SIZE_X,WINDOW_SIZE_Y); {create window}
+        clrScr; {clear window (for specific compilers)}
+        {draw red border around window}
+        TextBackground(red);
+        for subI := WindMinY to WindMaxY-1 do{draw vertical border}
+            begin
+                GotoXY(WindMinX, subI);
+                write(' ');
+                GotoXY(WindMaxX-1, subI);
+                write(' ');
+                Delay(1)
+            end;
+        for subI := WindMinX to WindMaxX-1 do{draw horizontal border}
+            begin
+                GotoXY(subI, WindMinY);
+                write(' ');
+                GotoXY(subI, WindMaxY-1);
+                write(' ');
+                Delay(1)
+            end;
+    end;
+
+
+
+
+procedure startGame;
+    type
+        twoDCoord = record
+            X, Y:integer;
+        end;
+    var
+        mazeMap: array of array of char;
+        mazeSizeX, mazeSizeY: integer;
+        gameRunning: boolean;
+        player: twoDCoord;
+        startPoint: twoDCoord;
+        endPoint: twoDCoord;
+        pressedKey:char;
+    procedure generateMap;
+        const
+            directionsList: array[1..4] of twoDCoord = (
+                (X: 0; Y:-1),{up}
+                (X: -1; Y:0),{left}
+                (X: 0; Y:+1),{down}
+                (X: +1; Y:0){right}
+            );
+        var
+            directionMap: array of array of integer;
+            visitedMap: array of array of boolean;
+            subI, subJ:integer;
+       
+        function changeDirection(direction:integer; amount:integer):integer;begin
+                direction := direction + amount;
+                if(direction < 1)then
+                    direction := direction+4;
+                if(direction > 4)then
+                    direction := direction-4;
+                exit(direction)
+            end;
+        procedure visit(x:integer; y:integer; direction:integer);
+            var
+                subI, subJ:integer;
+                thisX, thisY:integer;
+            begin
+                if((y > length(visitedMap)) or (y < 0))then exit;
+                if((x > length(visitedMap[y])) or (x < 1))then exit;
+                if(visitedMap[y, x] = true)then exit;
+                visitedMap[y, x] := true;
+                directionMap[y, x] := direction;
+                {find neighbour cells}
+                subJ := random(3);
+                for subI := 1 to length(directionsList) do
+                    begin
+                        thisX := x+directionsList[((subI + subJ)mod 4)+1].x;
+                        thisY := y+directionsList[((subI + subJ)mod 4)+1].y;
+                       
+                        visit(thisX, thisY, changeDirection(((subI + subJ)mod 4)+1, 2));
+                    end;
+            end;
+        procedure processMap;
+            var
+                subI, subJ:integer;
+                mazeX, mazeY:integer;
+                randomNo:integer;
+            begin
+                for subI := 0 to length(directionMap) do
+                    begin
+                        for subJ := 1 to length(directionMap[subI]) do
+                            begin
+                                if(directionMap[subI, subJ] = 0) or (directionMap[subI, subJ] = 9)then continue;
+                                {find center of this cell on maze map}
+                                mazeX := (subJ-1)*4+3;
+                                mazeY := (subI)*4+3;
+                                // writeln(directionMap[subI, subJ]);
+                                // writeln(subI);
+                                // writeln(subJ);
+                                {find the wall to be removed}
+                                randomNo := random(2);
+                                mazeX := mazeX+2*directionsList[directionMap[subI, subJ]].x;
+                                mazeY := mazeY+2*directionsList[directionMap[subI, subJ]].y;
+                                if(randomNo = 0) or (difficulty = 0)then
+                                    mazeMap[mazeX, mazeY] := ' ';
+                                mazeX := mazeX+1*directionsList[changeDirection(directionMap[subI, subJ], +1)].x;
+                                mazeY := mazeY+1*directionsList[changeDirection(directionMap[subI, subJ], +1)].y;
+                                if(randomNo = 1) or (difficulty = 0)then
+                                    mazeMap[mazeX, mazeY] := ' ';
+                                mazeX := mazeX+2*directionsList[changeDirection(directionMap[subI, subJ], -1)].x;
+                                mazeY := mazeY+2*directionsList[changeDirection(directionMap[subI, subJ], -1)].y;
+                                if(randomNo = 2) or (difficulty = 0)then
+                                    mazeMap[mazeX, mazeY] := ' ';
+                            end;
+                    end;
+            end;
+        begin
+            setlength(directionMap, 4, 9);
+            setlength(visitedMap, 4, 9);
+            for subI := 0 to length(visitedMap) do
+                begin
+                    for subJ := 1 to length(visitedMap[subI]) do
+                        begin
+                            visitedMap[subI][subJ] := false;
+                        end;
+                end;
+            visit(random(8)+1, random(3)+1, 9);
+            processMap;{remove wall from default map}
+
+
+        end;
+    procedure initMap;
+        var
+            mapInput: text;
+            subI, subJ:integer;
+        begin
+            assign(mapInput, './maps/default.map');
+            reset(mapInput);
+            for subI := 1 to mazeSizeY do
+                begin
+                    for subJ := 1 to mazeSizeX-1 do
+                        begin
+                            read(mapInput, mazeMap[subJ, subI]);
+                            case mazeMap[subJ, subI] of
+                                'S':
+                                    begin
+                                        startPoint.x := subJ;
+                                        startPoint.y := subI;
+                                    end;
+                                'E':
+                                    begin
+                                        endPoint.x := subJ;
+                                        endPoint.y := subI;
+                                    end;
+                                end;
+                        end;
+                    readln(mapInput, mazeMap[mazeSizeX, subI]);
+                end;
+            close(mapInput);
+           
+        end;
+    function textToColor(text:char):integer;
+        begin
+            case text of
+                '0':exit(black);
+                ' ':exit(white);
+                'S':exit(green);
+                'E':exit(red);
+            end;
+        end;
+    procedure drawMap;
+        var
+            subI, subJ:integer;
+        begin
+            TextBackground(black);
+            for subI := 1 to mazeSizeY do
+                begin
+                    for subJ := 1 to mazeSizeX do
+                        begin
+                            GotoXY(subJ*2, subI+1);
+                            TextBackground(textToColor(mazeMap[subJ, subI]));
+                            write('  ');
+                        end;
+                end;
+        end;
+    procedure drawPlayer(oldX:integer; oldY:integer);
+        begin
+            GotoXY(oldX*2, oldY+1);
+            TextBackground(textToColor(mazeMap[oldX, oldY]));
+            write('  ');
+            TextBackground(green);
+            GotoXY(player.x*2, player.y+1);
+            write('  ')
+        end;
+    procedure movePlayer(deltaX:integer; deltaY:integer);
+        const
+            winText = ' YOU WIN!!! ';
+        begin
+            if(mazeMap[player.x + deltaX][player.y + deltaY] <> '0')then {check if wall collision}
+                begin
+                    inc(player.x, deltaX);
+                    inc(player.y, deltaY);
+                    drawPlayer(player.x-deltaX, player.y-deltaY);
+                end;
+            if(mazeMap[player.x][player.y] = 'E')then{check endpoint}
+                begin
+                    gameRunning := false;
+                end;
+        end;
+    procedure keyHandle(key:char);
+        begin
+            case ord(key) of
+                0:
+                    begin
+                        key := Readkey;
+                        case ord(key) of
+                            72:movePlayer(0, -1);{up arrow}
+                            80:movePlayer(0, +1);{down arrow}
+                            75:movePlayer(-1, 0);{left arrow}
+                            77:movePlayer(+1, 0);{right arrow}
+                        end;
+                    end;
+            end;
+            case key of
+                'w':movePlayer(0, -1);
+                'a':movePlayer(-1, 0);
+                's':movePlayer(0, +1);
+                'd':movePlayer(+1, 0);
+            end;
+        end;
+    procedure countDown(sec:integer);
+        begin
+            GotoXY(mazeSizeX, mazeSizeX);
+           
+            TextBackground(red);
+            write('           ');
+            Delay(1000);
+            TextBackground(yellow);
+            write('           ');
+            Delay(1000);
+            TextBackground(green);
+            write('           ');
+            Delay(1000);
+            write('GO');
+            Delay(1000)
+        end;
+    procedure generateWinScreen;
+        const
+            winText = ' YOU WIN!!! ';
+        var
+            subI:integer;
+        begin
+            for subI := 1 to 3 do
+                begin
+                    TextBackground(white);
+                    GotoXY(player.x*2, player.y+1);
+                    write('  ');
+                    delay(170);
+                    TextBackground(green);
+                    GotoXY(player.x*2, player.y+1);
+                    write('  ');
+                    delay(170);
+                end;
+            TextBackground(green);
+            GotoXY(player.x*2 - length(winText), player.y+1);
+            writeln('            ');
+            GotoXY(player.x*2 - length(winText), player.y-1);
+            writeln('            ');
+            GotoXY(player.x*2 - length(winText), player.y);
+            for subI := 1 to length(winText) do
+                begin
+                    write(winText[subI]);
+                    delay(1);
+                end;
+            // writeln(GetTickCount64 - startTime);
+            delay(5000);
+        end;
+    procedure generateEndScreen();
+        var
+            userName: string;
+        begin
+            TextBackground(black);
+            FlushKeyBuffer;
+            clrScr;
+            generateWindow;
+            TextBackground(black);
+            GotoXY(3, 3);
+            stopWatch.printTimeUsed;
+            GotoXY(3, 4);
+            write('Your Name: ');
+            repeat
+                GotoXY(14, 4);
+                write('                                                            ');
+                GotoXY(14, 4);
+                readln(userName);
+            until ((length(userName) >= 3) and (length(userName) <= 20));
+            board.addRecord(userName, stopWatch.getTime);
+            readKey();
+        end;
+
+
+    begin
+        //inform player
+        GotoXY(3, 3);
+        writeln('Generating maze');
+
+
+        //generate maze
+        mazeSizeX := WINDOW_SIZE_X - 40;
+        mazeSizeY := WINDOW_SIZE_Y - 3;
+        setlength(mazeMap, mazeSizeX+1, mazeSizeY+1);
+        clrScr;
+        generateWindow;
+        initMap;{read default map file}
+        generateMap;{generate direction map with depth first search}
+
+
+        {init variables}
+        player.x := startPoint.x;
+        player.y := startPoint.y;
+
+
+        //inform player
+        GotoXY(3, 4);
+        countDown(3);
+
+
+        //start timer
+        stopWatch.startTimer;
+
+
+        drawMap;
+        drawPlayer(1, 1);
+        gameRunning := true;
+        FlushKeyBuffer;
+        while gameRunning do
+            begin
+                GotoXY(WINDOW_SIZE_X-1, WINDOW_SIZE_Y-1);
+                pressedKey := Readkey;
+                keyHandle(pressedKey);
+                stopWatch.updateTimeUsed(2, 19);
+            end;
+        //enddTimer
+        stopWatch.endTimer;
+        generateWinScreen;
+        generateEndScreen();
+        generateOptions;
+    end;
+
+
+
+
+procedure generateGuide; {coming soon}
+    begin
+        clrScr;
+        generateWindow;
+        TextBackground(black);
+        GotoXY(3, 3);
+        writeln('1. Use WASD or arrow keys to navigate.');
+        GotoXY(3, 5);
+        writeln('2. Use both to get double speed.');
+        GotoXY(3, 7);
+        writeln('3. Hold keys to gain speed boost.');
+        GotoXY(3, 9);
+        writeln('4. Head towards the red dot to win.');
+        GotoXY(3, 11);
+        writeln('5. Try and get the quickest time possible!!!!');
+        Readkey;
+        generateOptions;
+    end;
+
+
+procedure generateOptions;
+    type
+        option = record
+            Key: Char;
+            Caption: String;
+        end;
+
+
+    const
+        MenuOptions: array[1..4] of option = (
+            (Key: '1'; Caption:'Start game'),
+            (Key: '2'; Caption:'How to play'),
+            (Key: '3'; Caption:'Leaderboard'),
+            (Key: '4'; Caption:'Quit')
+        );
+    var
+        selectedKey: Integer;
+        pressedKey: Char;
+    procedure printMenu;
+        var
+            subI: integer;
+        begin
+            TextBackground(black);
+            for subI := 1 to length(MenuOptions) do
+                begin
+                    GotoXY(5, WindMaxY - 3 - length(MenuOptions) + subI);
+                    if(subI = selectedKey)then
+                        write('>')
+                    else
+                        write(' ');
+                    writeln(MenuOptions[subI].Caption);
+                end;
+            GotoXY(WindMaxX-1, WindMaxY-1)
+        end;
+    procedure updateSelected(movement:integer);
+        begin
+            {change selected key after pressing}
+            inc(selectedKey, movement);
+            {circulate no. if too large or too small}
+            if(selectedKey > length(MenuOptions)) then
+                selectedKey := selectedKey - length(MenuOptions);
+            if(selectedKey < 1) then
+                selectedKey := selectedKey + length(MenuOptions);
+        end;
+    procedure confirmSelection;
+        begin
+            case selectedKey of
+                1: startGame;
+                2: generateGuide;
+                3: board.generate;
+                4: selectedKey := 0;
+            end;
+            selectedKey := 0;
+        end;
+    procedure keyHandle(key:char);
+        begin
+            case ord(key) of
+                0:{special keys (arrow keys)}
+                    begin
+                        key := Readkey;
+                        case ord(key) of
+                            72: updateSelected(-1); {up arrow}
+                            80: updateSelected(+1); {down arrow}
+                        end;
+                    end;
+                32: confirmSelection; {space}
+                27: selectedKey := 0; {esc, exit program}
+            end;
+        end;
+    procedure printLogo;
+        begin
+           
+            TextBackground(black);
+            textcolor(red);
+            gotoXY(5, 4);
+            writeln('         ##################################################         ');
+            gotoXY(5, 5);
+            writeln('         #####  ######  ####    ####        ##        #####         ');
+            gotoXY(5, 6);
+            writeln('         #####    ##    ##  ####  ########  ##  ###########         ');
+            gotoXY(5, 7);
+            writeln('         #####  ##  ##  ##        ######  ####      #######         ');
+            gotoXY(5, 8);
+            writeln('         #####  ######  ##  ####  ####  ######  ###########         ');
+            gotoXY(5, 9);
+            writeln('         #####  ######  ##  ####  ##        ##        #####         ');
+            gotoXY(5, 10);
+            writeln('         ##################################################         ');
+            textcolor(lightgray);
+        end;
+    begin
+        TextBackground(black);
+        {generate window after switching GUI}
+        clrscr;
+        generateWindow;
+        printLogo;
+        selectedKey := 1;
+        {clear key pressed buffer}
+        FlushKeyBuffer;
+        {loop until a key is selected}
+        while selectedKey <> 0 do
+            begin
+                printMenu;
+                pressedKey := Readkey;
+                keyHandle(pressedKey);
+            end;
+       
+    end;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+begin
+   
+    randomize; {reset randomizer}
+    board.Create;
+    // board.clearRecords;
+    stopWatch.Create;
+    difficulty := 0;
+    generateOptions; {start generating the options on main thread}
+end.
